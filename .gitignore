@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# smokeTIPs runtime ledger (don't commit your own runs)
+.smoketips/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+uv.lock
