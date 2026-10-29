@@ -1,3 +1,5 @@
+<img src="docs/social-preview.png" alt="smokeTIPs" width="100%">
+
 # smokeTIPs
 
 **Observability and governance for AI orchestration.** Watch, score, and govern
