@@ -9,6 +9,7 @@
     smoketips replay --agent produtor-haiku           # audit transcript
     smoketips badge                                   # SVG grade badge
     smoketips diff --baseline base.json               # exit 1 on regression
+    smoketips session start                           # group one execution
 """
 from __future__ import annotations
 
@@ -21,11 +22,14 @@ from pathlib import Path
 
 from . import __version__
 from .badge import render as render_badge
+from .client import emit as record_event
 from .guard import check
-from .ledger import SMOKE_DIR, Event, append, find_root, read_events, write_report
+from .ledger import SMOKE_DIR, Event, find_root, read_events, write_report
 from .monitor import render_table, tail
 from .policy import PolicyError, describe as describe_policy, load_policy
 from .replay import render as render_replay, select as select_events
+from .session import (current as session_current, end as session_end,
+                      latest as session_latest, start as session_start)
 from .score import compare, from_dicts, render_diff, score
 
 
@@ -45,14 +49,48 @@ def cmd_emit(a: argparse.Namespace) -> int:
     e = Event(agent=a.agent, task=a.task or "", action=a.action or "",
               layer=a.role, tier=a.tier or "", tokens_in=a.tokens_in,
               tokens_out=a.tokens_out, output_bytes=a.output_bytes,
-              duration_ms=a.duration_ms, status=a.status, flags=a.flag or [])
-    append(find_root(), e)
-    print(f"recorded {e.agent} ({e.status})")
+              duration_ms=a.duration_ms, status=a.status, flags=a.flag or [],
+              session=a.session)
+    record_event(e, find_root())
+    label = f" [{e.session}]" if e.session else ""
+    print(f"recorded {e.agent} ({e.status}){label}")
+    return 0
+
+
+def _chosen_session(a: argparse.Namespace, events) -> str:
+    """--last beats --session, because it is the more specific ask."""
+    if getattr(a, "last", False):
+        newest = session_latest(events)
+        if not newest:
+            print("no grouped session in this ledger; showing everything",
+                  file=sys.stderr)
+        return newest
+    return getattr(a, "session", "") or ""
+
+
+def cmd_session(a: argparse.Namespace) -> int:
+    root = find_root()
+    if a.action == "start":
+        print(session_start(root, a.id))
+        return 0
+    if a.action == "end":
+        closed = session_end(root)
+        print(closed or "no session was open")
+        return 0
+    now = session_current(root)
+    if not now:
+        print("no session")
+        return 1          # a script can branch on this
+    print(now)
     return 0
 
 
 def cmd_score(a: argparse.Namespace) -> int:
-    rows = score(read_events(find_root()))
+    events = read_events(find_root())
+    chosen = _chosen_session(a, events)
+    if chosen:
+        events = [e for e in events if e.session == chosen]
+    rows = score(events)
     if a.json:
         print(json.dumps([asdict(r) for r in rows], ensure_ascii=False))
     elif not rows:
@@ -87,8 +125,9 @@ def cmd_badge(a: argparse.Namespace) -> int:
 
 
 def cmd_replay(a: argparse.Namespace) -> int:
-    events = select_events(read_events(find_root()), agent=a.agent,
-                           status=a.status, flag=a.flag)
+    all_events = read_events(find_root())
+    events = select_events(all_events, agent=a.agent, status=a.status,
+                           flag=a.flag, session=_chosen_session(a, all_events))
     print(render_replay(events))
     return 0
 
@@ -154,11 +193,22 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--duration-ms", type=int, default=0)
     e.add_argument("--status", default="ok")
     e.add_argument("--flag", action="append")
+    e.add_argument("--session", default="",
+                   help="override the active session for this event")
     e.set_defaults(func=cmd_emit)
 
     s = sub.add_parser("score", help="ranked performance of each layer")
     s.add_argument("--json", action="store_true")
+    s.add_argument("--session", default="", help="only this session")
+    s.add_argument("--last", action="store_true", help="only the newest session")
     s.set_defaults(func=cmd_score)
+
+    se = sub.add_parser("session", help="group an execution so it can be replayed")
+    se.add_argument("action", nargs="?", default="current",
+                    choices=["start", "current", "end"])
+    se.add_argument("--id", default="",
+                    help="adopt an id chosen elsewhere, e.g. a CI run id")
+    se.set_defaults(func=cmd_session)
 
     po = sub.add_parser("policy", help="show the policy the guard will enforce")
     po.add_argument("--json", action="store_true")
@@ -172,6 +222,8 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--agent", default="")
     rp.add_argument("--status", default="")
     rp.add_argument("--flag", default="")
+    rp.add_argument("--session", default="", help="only this session")
+    rp.add_argument("--last", action="store_true", help="only the newest session")
     rp.set_defaults(func=cmd_replay)
 
     d = sub.add_parser("diff",

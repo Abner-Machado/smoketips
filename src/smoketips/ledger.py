@@ -6,7 +6,7 @@ it only records what the other modules observe.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -31,6 +31,7 @@ class Event:
     status: str = "ok"            # ok | error | blocked
     flags: list[str] = field(default_factory=list)
     ts: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    session: str = ""             # groups one execution; "" means ungrouped
 
 
 def find_root(start: Optional[Path] = None) -> Path:
@@ -62,6 +63,16 @@ def append(root: Path, event: Event) -> Event:
     return event
 
 
+def _event_from(data: dict) -> Event:
+    """Build an Event, dropping keys this version does not know.
+
+    A ledger written by a newer smokeTIPs must stay readable by an older one,
+    so an unknown field is ignored instead of raising TypeError.
+    """
+    known = {f.name for f in fields(Event)}
+    return Event(**{k: v for k, v in data.items() if k in known})
+
+
 def read_events(root: Path) -> list[Event]:
     f = events_file(root)
     if not f.exists():
@@ -70,7 +81,7 @@ def read_events(root: Path) -> list[Event]:
     for line in f.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line:
-            out.append(Event(**json.loads(line)))
+            out.append(_event_from(json.loads(line)))
     return out
 
 

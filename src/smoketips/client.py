@@ -21,6 +21,7 @@ from typing import Optional
 from .guard import Config, Decision, check
 from .ledger import Event, append, find_root
 from .policy import load_policy
+from .session import current as current_session
 
 
 def guard(text: str = "", *, role: str = "delegate", output_bytes: int = 0,
@@ -35,8 +36,15 @@ def guard(text: str = "", *, role: str = "delegate", output_bytes: int = 0,
 
 
 def emit(event: Event, root: Optional[Path] = None) -> Event:
-    """Append a fully-formed event to the ledger."""
-    return append(root or find_root(), event)
+    """Append a fully-formed event to the ledger.
+
+    An event that does not name a session inherits the active one, so grouping
+    costs the caller nothing.
+    """
+    where = root or find_root()
+    if not event.session:
+        event.session = current_session(where)
+    return append(where, event)
 
 
 class layer:
@@ -48,8 +56,11 @@ class layer:
 
     def __init__(self, agent: str, *, tier: str = "", task: str = "",
                  role: str = "delegate", root: Optional[Path] = None,
-                 config: Config | None = None):
-        self.event = Event(agent=agent, tier=tier, task=task, layer=role)
+                 config: Config | None = None, session: str = ""):
+        # Resolved on entry, not on exit: the work belongs to the session it
+        # started in, even if the pointer moves while it runs.
+        self.event = Event(agent=agent, tier=tier, task=task, layer=role,
+                           session=session or current_session(root))
         self.role = role
         self.root = root
         self.config = config

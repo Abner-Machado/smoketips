@@ -92,6 +92,7 @@ smoketips tail       # live observation table
 | `emit <agent>` | record an event (for shell agents / CI) |
 | `score` | ranked performance of each layer |
 | `policy` | show the rules the guard will actually enforce |
+| `session start\|current\|end` | group one execution so it can be replayed |
 | `replay` | chronological transcript for an audit |
 | `badge` | write an SVG grade badge |
 | `diff --baseline <file>` | compare with a baseline; exit 1 on regression |
@@ -101,6 +102,15 @@ smoketips tail       # live observation table
 Every command answers through its exit code, so a shell agent can branch on it
 without parsing text. `diff` is the one built for CI: store `score --json` as a
 baseline, and the build fails the moment an agent regresses.
+
+`replay` and `score` take `--session <id>` or `--last` to narrow to one run.
+Set `SMOKETIPS_SESSION` and every nested call joins that run without writing a
+pointer file, which is what a CI job wants:
+
+```bash
+export SMOKETIPS_SESSION="ci-$GITHUB_RUN_ID"
+smoketips replay --last        # just this run, once it finishes
+```
 
 ## On-disk format
 

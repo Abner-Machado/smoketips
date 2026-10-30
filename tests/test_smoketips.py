@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import smoketips as st
-from smoketips import ledger, policy, replay
+from smoketips import ledger, policy, replay, session
 # `smoketips.badge` the name is the exported function, so reach for the module.
 from smoketips.badge import render as render_badge
 from smoketips.cli import main
@@ -239,3 +239,126 @@ def test_cli_replay_runs_on_an_empty_ledger(tmp_path: Path, monkeypatch,
     _cli_sandbox(tmp_path, monkeypatch)
     assert main(["replay"]) == 0
     assert "nothing to replay" in capsys.readouterr().out
+
+
+# --- session: the unit a replay can reproduce -----------------------------
+
+def test_session_id_sorts_by_time():
+    # Resolution is one second; the suffix only breaks ties within a second,
+    # so ordering is asserted across distinct timestamps.
+    stamp, suffix = session.new_id().split("-")
+    assert len(stamp) == 15 and stamp[8] == "T"
+    assert len(suffix) == 4
+    assert sorted(["20260202T000000-zzzz", "20260101T000000-aaaa"])[0] \
+        == "20260101T000000-aaaa"
+
+
+def test_session_start_current_end(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    (tmp_path / ".smoketips").mkdir()
+    assert session.current(tmp_path) == ""        # nothing open yet
+    opened = session.start(tmp_path)
+    assert session.current(tmp_path) == opened
+    assert session.end(tmp_path) == opened
+    assert session.current(tmp_path) == ""        # pointer gone
+
+
+def test_environment_beats_the_file(tmp_path: Path, monkeypatch):
+    (tmp_path / ".smoketips").mkdir()
+    session.start(tmp_path, "from-disk")
+    monkeypatch.setenv(session.ENV_VAR, "from-env")
+    assert session.current(tmp_path) == "from-env"
+
+
+def test_ending_a_session_keeps_its_events(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    (tmp_path / ".smoketips").mkdir()
+    opened = session.start(tmp_path)
+    st.emit(ledger.Event(agent="x", status="ok"), tmp_path)
+    session.end(tmp_path)
+    events = ledger.read_events(tmp_path)
+    assert events[0].session == opened            # replayable after the fact
+
+
+def test_emit_inherits_the_active_session(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    (tmp_path / ".smoketips").mkdir()
+    opened = session.start(tmp_path)
+    st.emit(ledger.Event(agent="x", status="ok"), tmp_path)
+    assert ledger.read_events(tmp_path)[0].session == opened
+
+
+def test_an_explicit_session_is_not_overridden(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    (tmp_path / ".smoketips").mkdir()
+    session.start(tmp_path)
+    st.emit(ledger.Event(agent="x", status="ok", session="mine"), tmp_path)
+    assert ledger.read_events(tmp_path)[0].session == "mine"
+
+
+def test_layer_stamps_the_session(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    (tmp_path / ".smoketips").mkdir()
+    opened = session.start(tmp_path)
+    with st.layer("produtor-haiku", root=tmp_path) as L:
+        L.output("done")
+    assert ledger.read_events(tmp_path)[0].session == opened
+
+
+def test_replay_and_score_isolate_one_session(tmp_path: Path):
+    ledger.append(tmp_path, ledger.Event(agent="a", status="ok", session="s1"))
+    ledger.append(tmp_path, ledger.Event(agent="b", status="ok", session="s2"))
+    events = ledger.read_events(tmp_path)
+    assert len(replay.select(events, session="s1")) == 1
+    assert session.latest(events) == "s2"
+    assert session.ids(events) == ["s1", "s2"]
+
+
+# A ledger is a file on disk that outlives any one version of this tool.
+def test_a_ledger_without_sessions_still_reads(tmp_path: Path):
+    d = tmp_path / ".smoketips"
+    d.mkdir()
+    (d / "events.jsonl").write_text(
+        '{"agent": "old", "status": "ok", "ts": "2026-01-01T00:00:00+00:00"}\n',
+        encoding="utf-8")
+    events = ledger.read_events(tmp_path)
+    assert events[0].agent == "old" and events[0].session == ""
+
+
+def test_an_unknown_field_is_ignored_not_fatal(tmp_path: Path):
+    d = tmp_path / ".smoketips"
+    d.mkdir()
+    (d / "events.jsonl").write_text(
+        '{"agent": "future", "status": "ok", "invented_later": 42}\n',
+        encoding="utf-8")
+    assert ledger.read_events(tmp_path)[0].agent == "future"
+
+
+def test_cli_session_round_trip(tmp_path: Path, monkeypatch, capsys):
+    _cli_sandbox(tmp_path, monkeypatch)
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    assert main(["session"]) == 1                  # nothing open
+    assert "no session" in capsys.readouterr().out
+
+    assert main(["session", "start", "--id", "run-7"]) == 0
+    capsys.readouterr()
+    assert main(["session"]) == 0
+    assert capsys.readouterr().out.strip() == "run-7"
+
+    assert main(["emit", "haiku", "--status", "ok"]) == 0
+    assert "run-7" in capsys.readouterr().out
+    assert ledger.read_events(tmp_path)[0].session == "run-7"
+
+
+def test_cli_last_narrows_to_the_newest_session(tmp_path: Path, monkeypatch,
+                                                capsys):
+    _cli_sandbox(tmp_path, monkeypatch)
+    monkeypatch.delenv(session.ENV_VAR, raising=False)
+    ledger.append(tmp_path, ledger.Event(agent="older", status="ok",
+                                         session="20260101T000000-aaaa"))
+    ledger.append(tmp_path, ledger.Event(agent="newer", status="ok",
+                                         session="20260202T000000-bbbb"))
+    capsys.readouterr()
+    assert main(["replay", "--last"]) == 0
+    out = capsys.readouterr().out
+    assert "newer" in out and "older" not in out

@@ -20,9 +20,11 @@ def _parsed(ts: str) -> Optional[datetime]:
 
 
 def select(events: Iterable[Event], *, agent: str = "", status: str = "",
-           flag: str = "") -> list[Event]:
+           flag: str = "", session: str = "") -> list[Event]:
     """Filter a session down to what is being audited."""
     out = list(events)
+    if session:
+        out = [e for e in out if e.session == session]
     if agent:
         out = [e for e in out if e.agent == agent]
     if status:
