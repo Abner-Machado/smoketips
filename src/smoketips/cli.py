@@ -10,6 +10,8 @@
     smoketips badge                                   # SVG grade badge
     smoketips diff --baseline base.json               # exit 1 on regression
     smoketips session start                           # group one execution
+    smoketips replay --last                           # verdict first
+    smoketips replay --last -l 2                      # open the timeline
 """
 from __future__ import annotations
 
@@ -27,7 +29,8 @@ from .guard import check
 from .ledger import SMOKE_DIR, Event, find_root, read_events, write_report
 from .monitor import render_table, tail
 from .policy import PolicyError, describe as describe_policy, load_policy
-from .replay import render as render_replay, select as select_events
+from .replay import (MAX_LEVEL, render_level as render_replay,
+                     select as select_events)
 from .session import (current as session_current, end as session_end,
                       latest as session_latest, start as session_start)
 from .score import compare, from_dicts, render_diff, score
@@ -128,7 +131,7 @@ def cmd_replay(a: argparse.Namespace) -> int:
     all_events = read_events(find_root())
     events = select_events(all_events, agent=a.agent, status=a.status,
                            flag=a.flag, session=_chosen_session(a, all_events))
-    print(render_replay(events))
+    print(render_replay(events, level=MAX_LEVEL if a.deep else a.level))
     return 0
 
 
@@ -224,6 +227,9 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--flag", default="")
     rp.add_argument("--session", default="", help="only this session")
     rp.add_argument("--last", action="store_true", help="only the newest session")
+    rp.add_argument("--level", "-l", type=int, default=0,
+                    help=f"detail, 0 (verdict) to {MAX_LEVEL} (everything)")
+    rp.add_argument("--deep", action="store_true", help="shorthand for the deepest level")
     rp.set_defaults(func=cmd_replay)
 
     d = sub.add_parser("diff",

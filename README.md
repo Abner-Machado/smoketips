@@ -93,7 +93,7 @@ smoketips tail       # live observation table
 | `score` | ranked performance of each layer |
 | `policy` | show the rules the guard will actually enforce |
 | `session start\|current\|end` | group one execution so it can be replayed |
-| `replay` | chronological transcript for an audit |
+| `replay` | the run, from verdict to full detail (`--level 0..3`) |
 | `badge` | write an SVG grade badge |
 | `diff --baseline <file>` | compare with a baseline; exit 1 on regression |
 | `report` | write `.smoketips/report.md` |
@@ -102,6 +102,16 @@ smoketips tail       # live observation table
 Every command answers through its exit code, so a shell agent can branch on it
 without parsing text. `diff` is the one built for CI: store `score --json` as a
 baseline, and the build fails the moment an agent regresses.
+
+`replay` answers coarsest first. Level 0 is the verdict and the first thing
+that went wrong; the evidence opens only when asked:
+
+```bash
+smoketips replay --last              # 4 lines: what happened, who broke it
+smoketips replay --last --level 1    # one row per agent, worst last
+smoketips replay --last --level 2    # the timeline
+smoketips replay --last --deep       # every field behind every action
+```
 
 `replay` and `score` take `--session <id>` or `--last` to narrow to one run.
 Set `SMOKETIPS_SESSION` and every nested call joins that run without writing a

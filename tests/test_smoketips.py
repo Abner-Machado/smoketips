@@ -350,6 +350,70 @@ def test_cli_session_round_trip(tmp_path: Path, monkeypatch, capsys):
     assert ledger.read_events(tmp_path)[0].session == "run-7"
 
 
+# --- replay levels: verdict first, evidence on request --------------------
+
+def _busy_session(tmp_path: Path) -> list:
+    ledger.append(tmp_path, ledger.Event(agent="haiku", task="scaffold",
+                                         status="ok", session="s1"))
+    ledger.append(tmp_path, ledger.Event(agent="haiku", task="fixtures",
+                                         status="ok", session="s1"))
+    ledger.append(tmp_path, ledger.Event(agent="sonnet", task="refactor",
+                                         action="rm -rf build", status="blocked",
+                                         flags=["destructive"], session="s1"))
+    ledger.append(tmp_path, ledger.Event(agent="sonnet", task="retry",
+                                         status="error", session="s1"))
+    return ledger.read_events(tmp_path)
+
+
+def test_level_zero_names_the_first_failure(tmp_path: Path):
+    text = replay.summary(_busy_session(tmp_path))
+    assert "blocked 1" in text and "errors 1" in text
+    assert "2 agents" in text and "4 actions" in text
+    assert "first blocked: sonnet" in text
+    assert "destructive" in text
+
+
+def test_level_zero_is_far_smaller_than_the_full_detail(tmp_path: Path):
+    events = _busy_session(tmp_path)
+    assert len(replay.summary(events)) * 3 < len(replay.detail(events))
+
+
+def test_level_one_ranks_the_worst_agent_first(tmp_path: Path):
+    text = replay.by_agent(_busy_session(tmp_path))
+    rows = [ln for ln in text.splitlines()[2:] if ln.strip()]
+    assert rows[-1].startswith("sonnet")       # worst sinks to the bottom
+    assert rows[0].startswith("haiku")
+
+
+def test_every_level_survives_an_empty_ledger():
+    for lvl in range(replay.MAX_LEVEL + 1):
+        assert replay.render_level([], lvl) == "nothing to replay"
+
+
+def test_an_out_of_range_level_clamps(tmp_path: Path):
+    events = _busy_session(tmp_path)
+    assert replay.render_level(events, 99) == replay.detail(events)
+    assert replay.render_level(events, -5) == replay.summary(events)
+
+
+def test_cli_replay_defaults_to_the_verdict(tmp_path: Path, monkeypatch,
+                                            capsys):
+    _cli_sandbox(tmp_path, monkeypatch)
+    _busy_session(tmp_path)
+    capsys.readouterr()
+
+    assert main(["replay"]) == 0
+    short = capsys.readouterr().out
+    assert "first blocked" in short
+    assert "scaffold" not in short            # the timeline stays closed
+
+    assert main(["replay", "--level", "2"]) == 0
+    assert "scaffold" in capsys.readouterr().out
+
+    assert main(["replay", "--deep"]) == 0
+    assert "layer=delegate" in capsys.readouterr().out
+
+
 def test_cli_last_narrows_to_the_newest_session(tmp_path: Path, monkeypatch,
                                                 capsys):
     _cli_sandbox(tmp_path, monkeypatch)
