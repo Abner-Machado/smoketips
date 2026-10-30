@@ -40,10 +40,19 @@ report you can read in a pull request.
 Pure Python, no runtime dependencies. Runs on macOS, Linux, and Windows.
 
 ```bash
-uv tool install smoketips        # or: pipx install smoketips
-# or run without installing:
-uvx smoketips --help
+uv tool install git+https://github.com/Abner-Machado/smoketips
+# or: pipx install git+https://github.com/Abner-Machado/smoketips
+# or, inside a virtualenv: pip install git+https://github.com/Abner-Machado/smoketips
 ```
+
+Try it once without installing anything:
+
+```bash
+uvx --from git+https://github.com/Abner-Machado/smoketips smoketips --help
+```
+
+Not on PyPI yet, so `uv tool install smoketips` will not resolve. That shorter
+form starts working the day the first release is published.
 
 ## Use it
 
@@ -82,8 +91,16 @@ smoketips tail       # live observation table
 | `check <text>` | judge an action; exit 1 if blocked |
 | `emit <agent>` | record an event (for shell agents / CI) |
 | `score` | ranked performance of each layer |
+| `policy` | show the rules the guard will actually enforce |
+| `replay` | chronological transcript for an audit |
+| `badge` | write an SVG grade badge |
+| `diff --baseline <file>` | compare with a baseline; exit 1 on regression |
 | `report` | write `.smoketips/report.md` |
 | `tail` / `watch` | live observation table |
+
+Every command answers through its exit code, so a shell agent can branch on it
+without parsing text. `diff` is the one built for CI: store `score --json` as a
+baseline, and the build fails the moment an agent regresses.
 
 ## On-disk format
 

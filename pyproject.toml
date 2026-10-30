@@ -5,7 +5,7 @@ description = "Observability and governance for AI orchestration: watch, score, 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "BjornBigornaDev" }]
+authors = [{ name = "Abner Machado" }]
 keywords = ["ai-agents", "orchestration", "observability", "governance", "mcp", "llm", "multi-agent"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -18,8 +18,8 @@ dependencies = []
 smoketips = "smoketips.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/BjornBigornaDev/smoketips"
-Repository = "https://github.com/BjornBigornaDev/smoketips"
+Homepage = "https://github.com/Abner-Machado/smoketips"
+Repository = "https://github.com/Abner-Machado/smoketips"
 
 [build-system]
 requires = ["hatchling"]
