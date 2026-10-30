@@ -20,12 +20,18 @@ from typing import Optional
 
 from .guard import Config, Decision, check
 from .ledger import Event, append, find_root
+from .policy import load_policy
 
 
 def guard(text: str = "", *, role: str = "delegate", output_bytes: int = 0,
-          config: Config | None = None) -> Decision:
-    """Judge an action without recording it. Thin pass-through to guard.check."""
-    return check(text, role=role, output_bytes=output_bytes, config=config)
+          config: Config | None = None, root: Optional[Path] = None) -> Decision:
+    """Judge an action without recording it.
+
+    With no explicit config the project's `.smoketips.toml` applies, so the repo
+    governs itself instead of every caller re-stating the rules.
+    """
+    return check(text, role=role, output_bytes=output_bytes,
+                 config=config or load_policy(root))
 
 
 def emit(event: Event, root: Optional[Path] = None) -> Event:
@@ -57,7 +63,8 @@ class layer:
         size = len(text.encode("utf-8"))
         self.event.output_bytes += size
         self.event.tokens_out += tokens_out
-        d = check(text, role=self.role, output_bytes=size, config=self.config)
+        cfg = self.config or load_policy(self.root)
+        d = check(text, role=self.role, output_bytes=size, config=cfg)
         for f in d.flags:
             if f not in self.event.flags:
                 self.event.flags.append(f)

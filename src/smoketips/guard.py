@@ -42,6 +42,10 @@ class Config:
         default_factory=lambda: list(DESTRUCTIVE_PATTERNS))
     secret_patterns: list[tuple[str, str]] = field(
         default_factory=lambda: list(SECRET_PATTERNS))
+    # Escape hatch for a repo whose own commands look destructive but aren't
+    # (a dry run, a scratch path). Checked before the destructive rules; it
+    # never excuses a secret or an oversized output.
+    allow_patterns: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -68,7 +72,9 @@ def check(text: str = "", *, role: str = "delegate", output_bytes: int = 0,
     flags: list[str] = []
     reasons: list[str] = []
 
-    for pat in cfg.destructive_patterns:
+    allowed = any(re.search(p, text, re.IGNORECASE) for p in cfg.allow_patterns)
+
+    for pat in (() if allowed else cfg.destructive_patterns):
         if re.search(pat, text, re.IGNORECASE):
             flags.append("destructive")
             if _is_delegate(role):
