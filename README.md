@@ -169,6 +169,12 @@ uv sync
 uv run pytest
 ```
 
+## Sponsors
+
+No sponsors yet. If this saves your team from an agent doing something expensive,
+you can [fund the next fix](https://github.com/sponsors/Abner-Machado). The code stays
+MIT either way. See [SPONSORS.md](SPONSORS.md).
+
 ## License
 
-MIT © BjornBigornaDev
+MIT © Abner Machado

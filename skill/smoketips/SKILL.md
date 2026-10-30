@@ -3,7 +3,7 @@ name: smoketips
 description: Observe and govern delegated AI work. Use when an orchestrator delegates a task to a cheaper model or sub-agent and you want the delegation watched, capped, and scored — never run a delegate unwatched. Triggers on "delegate", "sub-agent", "orchestrate", "watch the delegate", "cap output", "block destructive", "score the layers".
 license: MIT
 metadata:
-  author: BjornBigornaDev
+  author: Abner Machado
   version: "0.1.0"
 ---
 
