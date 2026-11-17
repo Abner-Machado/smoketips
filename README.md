@@ -2,6 +2,9 @@
 
 # smokeTIPs
 
+[![CI](https://github.com/Abner-Machado/smoketips/actions/workflows/ci.yml/badge.svg)](https://github.com/Abner-Machado/smoketips/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Observability and governance for AI orchestration.** Watch, score, and govern
 the layers an orchestrator delegates to — never run a delegate unwatched.
 

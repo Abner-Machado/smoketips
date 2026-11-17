@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.10", "3.12", "3.13"]
+        include:
+          - os: windows-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the package and pytest
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pytest
+      - name: Run the suite
+        run: python -m pytest -q
+
+  no-runtime-dependencies:
+    # pyproject declares dependencies = []. This is that line as a check: every import in
+    # src/ has to be standard library, except one behind a try/except on a missing module,
+    # which is how tomli is used on 3.10 and is a fallback rather than a requirement.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Runtime imports are standard library
+        run: python tools/stdlib_guard.py src
+      - name: The only test dependency is pytest
+        run: python tools/stdlib_guard.py . --allow pytest
+
+  readme-example-works:
+    # The first command a reader copies out of the README. If this job fails, the README
+    # is lying to someone who trusted it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e .
+      - name: A delegate's destructive command is blocked, and the exit code says so
+        shell: bash
+        run: |
+          set +e
+          out=$(smoketips check "rm -rf build" --role delegate 2>&1)
+          code=$?
+          echo "$out"
+          if [ "$code" != "1" ]; then echo "expected exit 1, got $code"; exit 1; fi
+          case "$out" in
+            *BLOCKED*) echo "README example holds" ;;
+            *) echo "expected BLOCKED in the output"; exit 1 ;;
+          esac
